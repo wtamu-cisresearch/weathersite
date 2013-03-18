@@ -1,0 +1,217 @@
+{% load dajaxice_templatetags %}
+<html>
+<head>
+<title> Mariposa Weather Data </title>
+{% dajaxice_js_import %}
+<link rel="stylesheet" type="text/css" media="all" href="{{ STATIC_URL }}jsdatepick/jsDatePick_ltr.css" />
+<style type="text/css">
+#controls { display: none; }
+</style>
+<script type="text/javascript" src="{{ STATIC_URL }}js/moment.min.js"></script>
+<script language="javascript" type="text/javascript" src="{{ STATIC_URL }}flot/jquery.js"></script>
+<script language="javascript" type="text/javascript" src="{{ STATIC_URL }}flot/jquery.flot.js"></script>
+<script language="javascript" type="text/javascript" src="{{ STATIC_URL }}flot/jquery.flot.selection.js"></script>
+<script type="text/javascript" src="{{ STATIC_URL }}jsdatepick/jsDatePick.full.1.3.js"></script>
+<script type="text/javascript" charset="utf-8">
+	window.onload = function() {
+		new JsDatePick({
+			useMode:2,
+			target:"startDate",
+			weekStartDay: 0,
+			imgPath:"{{ STATIC_URL }}jsdatepick/img/"
+		});
+		
+		new JsDatePick({
+			useMode:2,
+			target:"endDate",
+			weekStartDay: 0,
+			imgPath:"{{ STATIC_URL }}jsdatepick/img/"
+		});
+	};
+	var response;
+	var options = {
+		xaxis: { 
+			mode: "time"
+		},
+		selection: { mode: "xy" },
+		grid: {
+			hoverable: true, 
+			clickable: true, 
+			autoHighlight: true
+		}
+	};
+	
+	function requestchart() {
+		var sensorElement = document.getElementById("sensor_list");
+        var sensor_id = sensorElement.options[sensorElement.selectedIndex].value;
+		var datatypeElement = document.getElementById("datatype_list");
+        var datatype_id = datatypeElement.options[datatypeElement.selectedIndex].value;
+		$.post('/weatherapp/getdata/', 
+				{sensor_id: sensor_id,
+				 datatype_id: datatype_id}, 
+				function(e) {
+					$("#controls").show();
+					response = JSON.parse(e);
+					$.plot($("#placeholder"), 
+						[{data: response.data, label: response.units,
+						  points: {show: true}, 
+						  lines: {show: true}, 
+						  hoverable: true, 
+						  clickable: true}], options);
+				}
+		);
+	}
+	
+	function getData(x1, x2) {
+		var d = [];
+		for (var i = 0; i < response.data.length; i++) {
+			if (response.data[i][0] >= x1 && response.data[i][0] <= x2) {
+				d.push(response.data[i])
+			}
+		}
+		return [ {label: response.units, data: d, points: {show: true}, lines: {show: true}, hoverable: true, clickable: true} ];
+	}
+	
+	function snapToGrid(x1, x2, y1, y2) {
+		var rx1 = rx2 = -1;
+		var ry1 = y1;
+		var ry2 = y2;
+				
+		for (var i = 0; i < response.data.length; i++) {
+			if (response.data[i][0] >= x1 && response.data[i][0] <= x2) {
+				ry1 = Math.min(response.data[i][1], ry1);
+				ry2 = Math.max(response.data[i][1], ry2);
+			}
+			if (rx1 == -1 && x1 <= response.data[i][0]) {
+				rx1 = response.data[i][0];
+			}
+			if (rx2 == -1 && x2 <= response.data[i][0]) {
+				rx2 = response.data[i][0];
+				break;
+			}
+		}
+		if (rx1 == -1) rx1 = response.data[0][0];
+		if (rx2 == -1) rx2 = response.data[response.data.length - 1][0];
+		return [rx1, rx2, ry1, ry2];
+	}
+	
+    function showTooltip(x, y, contents) {
+        $('<div id="tooltip">' + contents + '</div>').css( {
+            position: 'absolute',
+            display: 'none',
+            top: y + 5,
+            left: x + 5,
+            border: '1px solid #fdd',
+            padding: '2px',
+            'background-color': '#fee',
+            opacity: 0.80
+        }).appendTo("body").fadeIn(200);
+    }
+</script>
+</head>
+<body>
+{% if sensor_list %}
+	<select id="sensor_list">
+	{% for sensor in sensor_list %}
+		<option value="{{ sensor.id }}">{{ sensor.name }}</option>
+	{% endfor %}
+	</select>
+{% else %}
+	<p>No sensors are available.</p>
+{% endif %}
+{% if datatype_list %}
+	<select id="datatype_list">
+	{% for datatype in datatype_list %}
+		<option value="{{ datatype.id }}">{{ datatype.name }}</option>
+	{% endfor %}
+	</select>
+{% endif %}
+<button id="request_chart_btn" onclick="requestchart()">Request Chart</button>
+
+<hr />
+<div id="placeholder" style="width:600px;height:300px;"></div>
+<div id="controls">
+<p>Controls: <button id="zoomout">Zoom Out</button>
+<br />
+Select Date Range: <input type="text" size="12" id="startDate" /> <input type="text" size="12" id="endDate" /> <button id="zoomin">Zoom</button></p>
+</div>
+<script id="source">
+$(function () {
+    $("#zoomout").click(function () {
+		if (response.data == undefined) return;
+		$.plot($("#placeholder"), 
+			[{data: response.data, label: response.units,
+			  points: {show: true}, 
+			  lines: {show: true}, 
+			  hoverable: true, 
+			  clickable: true}], options);
+    });
+	
+	$("#zoomin").click(function () {
+		if (response.data == undefined) return;
+        // do the zooming
+		var x1 = 0;
+		var x2 = parseInt(moment.utc().format("X"));
+		var tmpX;
+		if ($("#startDate").val()) {
+			x1 = parseInt(moment.utc($("#startDate").val(), "MM-DD-YYYY").format("X")) * 1000;
+		}
+		if ($("#endDate").val()) {
+			x2 = parseInt(moment.utc($("#endDate").val(), "MM-DD-YYYY").format("X")) * 1000;
+		}
+		if (x1 > x2) {
+			tmpX = x1;
+			x1 = x2;
+			x2 = tmpX;
+		}
+		var y1 = Number.MAX_VALUE;
+		var y2 = 0;
+		console.log(x1, x2, y1, y2);
+		[x1, x2, y1, y2] = snapToGrid(x1, x2, y1, y2);
+		console.log(x1, x2, y1, y2);
+		// do the zooming
+        plot = $.plot($("#placeholder"), getData(x1, x2),
+                      $.extend(true, {}, options, {
+                          xaxis: { min: x1, max: x2 },
+                          yaxis: { min: y1, max: y2 }
+                      }));
+    });
+	
+	var previousPoint = null;
+    $("#placeholder").bind("plothover", function (event, pos, item) {
+       // $("#x").text(pos.x.toFixed(2));
+       // $("#y").text(pos.y.toFixed(2));
+
+        if (item) {
+            if (previousPoint != item.dataIndex) {
+                previousPoint = item.dataIndex;
+                    
+                $("#tooltip").remove();
+                var x = item.datapoint[0].toFixed(2),
+                    y = item.datapoint[1].toFixed(2);
+                showTooltip(item.pageX, item.pageY, y + " " + item.series.label + " @ " + moment.utc(parseInt(x)).format("MMM Do YYYY, hh:mm:ss a"));
+            }
+        } else {
+            $("#tooltip").remove();
+            previousPoint = null;            
+        }
+    });
+	 $("#placeholder").bind("plotselected", function (event, ranges) {
+        // clamp the zooming to prevent eternal zoom
+        if (ranges.xaxis.to - ranges.xaxis.from < 0.00001)
+            ranges.xaxis.to = ranges.xaxis.from + 0.00001;
+        if (ranges.yaxis.to - ranges.yaxis.from < 0.00001)
+            ranges.yaxis.to = ranges.yaxis.from + 0.00001;
+        
+		[ranges.xaxis.from, ranges.xaxis.to, ranges.yaxis.from, ranges.yaxis.to] = snapToGrid(ranges.xaxis.from, ranges.xaxis.to, ranges.yaxis.from, ranges.yaxis.to);
+        // do the zooming
+        plot = $.plot($("#placeholder"), getData(ranges.xaxis.from, ranges.xaxis.to),
+                      $.extend(true, {}, options, {
+                          xaxis: { min: ranges.xaxis.from, max: ranges.xaxis.to },
+                          yaxis: { min: ranges.yaxis.from, max: ranges.yaxis.to }
+                      }));
+    });
+});
+</script>
+</body>
+</html>
