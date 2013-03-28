@@ -16,18 +16,26 @@ def index(request):
 	return render_to_response('weatherapp/index.html', {'sensor_list': sensor_list, "datatype_list": datatype_list}, context_instance=RequestContext(request))
 
 def data_handler(request):
-	logger.debug("data_handler called.")
-	sensor_id = request.POST['sensor_id']
+	sensor_ids = request.POST.getlist('sensor_ids[]')
 	datatype_id = request.POST['datatype_id']
-	weather_data = WeatherData.objects.filter(sensor__id=sensor_id, type__id=datatype_id)
-	datatype = DataType.objects.get(pk=datatype_id)
-	data_points = []
-	for d in weather_data:
-		localtime = timezone.localtime(d.timestamp)
-		# flot treats all timestamps as if they were UTC. We have to add our
-		# local timezone offset to make them display correct
-		flot_utcfix = localtime + localtime.utcoffset()
-		js_timestamp = int(time.mktime(flot_utcfix.timetuple())) * 1000
-		data_points.append([js_timestamp, d.value])
+	logger.debug("Getting %s data for sensors %s.", datatype_id, sensor_ids)
 
-	return HttpResponse(simplejson.dumps({'data':data_points, 'units':datatype.units}))
+	result = []
+	for sensor_id in sensor_ids:
+		sensor_id = int(sensor_id)
+		sensor = Sensor.objects.get(pk=sensor_id)
+		weather_data = WeatherData.objects.filter(sensor__id=sensor_id, type__id=datatype_id)
+		datatype = DataType.objects.get(pk=datatype_id)
+		data_points = []
+		for d in weather_data:
+			localtime = timezone.localtime(d.timestamp)
+			# flot treats all timestamps as if they were UTC. We have to add our
+			# local timezone offset to make them display correct
+			flot_utcfix = localtime + localtime.utcoffset()
+			js_timestamp = int(time.mktime(flot_utcfix.timetuple())) * 1000
+			data_points.append([js_timestamp, d.value])
+
+		result.append({'data':data_points, 'label':sensor.name, 'points': {'show': True}, 'lines': {'show': True}, 'hoverable': True, 'clickable': True})
+		
+	return HttpResponse(simplejson.dumps(result))
+	#return HttpResponse(simplejson.dumps({'data':data_points, 'units':datatype.units}))
