@@ -5,8 +5,12 @@ from django.shortcuts import render_to_response
 from weatherapp.models import Sensor, DataType, WeatherData
 from django.utils import simplejson, timezone
 from django.conf import settings
+from django.core.files.temp import NamedTemporaryFile
+from django.core.servers.basehttp import FileWrapper
+import csv
 import time
 import logging
+import os
 logger = logging.getLogger('weathersite.weatherapp')
 
 def index(request):
@@ -39,3 +43,20 @@ def data_handler(request):
 		
 	return HttpResponse(simplejson.dumps(result))
 	#return HttpResponse(simplejson.dumps({'data':data_points, 'units':datatype.units}))
+
+def csv_export(request):
+	logger.debug("csv export requested.")
+	tmpfile = NamedTemporaryFile(suffix='.csv')
+	csvwriter = csv.writer(tmpfile)
+	# write csv headers
+	csvwriter.writerow(['sensor_id', 'sensor_name', 'timestamp', 'value', 'value_name', 'value_units'])
+	weather_data = WeatherData.objects.all()
+	for d in weather_data:
+		csvwriter.writerow([d.sensor.id, d.sensor.name, d.timestamp, d.value, d.type.name, d.type.units])
+	wrapper = FileWrapper(tmpfile)
+	logger.debug("Serving CSV file name=%s length=%s", tmpfile.name, tmpfile.tell())
+	response = HttpResponse(wrapper, content_type='text/plain')
+	response['Content-Disposition'] = 'attachment; filename=weather.csv'
+	response['Content-Length'] = tmpfile.tell()
+	tmpfile.seek(0)
+	return response

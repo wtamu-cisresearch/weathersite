@@ -40,7 +40,7 @@
 			autoHighlight: true
 		}
 	};
-	
+
 	function requestchart() {
 		var sensorElement = document.getElementById("sensor_list");
         //var sensor_id = sensorElement.options[sensorElement.selectedIndex].value;
@@ -143,7 +143,8 @@
 	</select>
 {% endif %}
 <button id="request_chart_btn" onclick="requestchart()">Request Chart</button>
-
+<br />
+<a href="/weatherapp/csvexport" id="csvlink" style="font-size: 8pt">[Export CSV]</a>
 <hr />
 <div id="placeholder" style="width:600px;height:300px;"></div>
 <div id="controls">
